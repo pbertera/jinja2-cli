@@ -22,3 +22,11 @@ def test_absolute_path():
     if isinstance(output, cli.binary_type):
         output = output.decode('utf-8')
     assert output == "Test"
+
+def test_markdown():
+    path = "./files/md_template.j2"
+
+    output = cli.render(path, {"content": "#Test"}, [], markdown=True)
+    if isinstance(output, cli.binary_type):
+        output = output.decode('utf-8')
+    assert output == "<h1>Test</h1>\n"

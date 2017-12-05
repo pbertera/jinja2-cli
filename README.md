@@ -43,6 +43,20 @@ If `xmltodict` is present, you can use XML as an input data source.
 
 `$ pip install jinja2-cli[xml]`
 
+## Optional support for Markdown Jinja2 filter
+If you have the `Markdown` python package installed you can use the Markdown Jinja2 filter:
+
+```
+$ cat md.j2
+{{ content|markdown }}
+
+$ cat var.json
+{"content": "#this is markdown"}
+
+$ jinja2 -M md.j2 var.json
+<h1>this is markdown</h1>
+```
+
 ## TODO
  * Variable inheritance and overrides
   * Tests!

@@ -14,9 +14,9 @@ sys.path.insert(0, os.getcwd())
 PY3 = sys.version_info[0] == 3
 
 if PY3:
-    text_type = str
+    binary_type = bytes
 else:
-    text_type = unicode
+    binary_type = str
 
 
 class InvalidDataFormat(Exception):
@@ -194,7 +194,7 @@ import jinja2
 from jinja2 import Environment, FileSystemLoader
 
 
-def render(template_path, data, extensions, strict=False):
+def render(template_path, data, extensions, strict=False, markdown=False, md_extensions=[]):
     env = Environment(
         loader=FileSystemLoader(os.path.dirname(template_path)),
         extensions=extensions,
@@ -206,6 +206,12 @@ def render(template_path, data, extensions, strict=False):
 
     # Add environ global
     env.globals['environ'] = os.environ.get
+
+    if markdown:
+        # add the Markdown filter
+        import markdown
+        md = markdown.Markdown(extensions=md_extensions)
+        env.filters['markdown'] = lambda text: jinja2.Markup(md.convert(text))
 
     output = env.get_template(os.path.basename(template_path)).render(data)
     return output.encode('utf-8')
@@ -283,10 +289,10 @@ def cli(opts, args):
             sys.stderr.write('ERROR: unknown section. Exiting.')
             return 1
 
-    output = render(template_path, data, extensions, opts.strict)
+    output = render(template_path, data, extensions, opts.strict, opts.markdown, opts.md_extensions)
 
-    if isinstance(output, text_type):
-        output = output.encode('utf-8')
+    if isinstance(output, binary_type):
+        output = output.decode('utf-8')
     sys.stdout.write(output)
     return 0
 
@@ -329,6 +335,14 @@ def main():
         '-e', '--extension',
         help='extra jinja2 extensions to load',
         dest='extensions', action='append', default=['do', 'with_', 'autoescape', 'loopcontrols'])
+    parser.add_option(
+        '-M', '--markdown',
+        help='support for Markdown jinja2 filter',
+        dest='markdown', action='store_true')
+    parser.add_option(
+        '-E', '--md-extension',
+        help='Python Markdown extensions to load',
+        dest='md_extensions', action='append', default=[])
     parser.add_option(
         '-D',
         help='Define template variable in the form of key=value',
