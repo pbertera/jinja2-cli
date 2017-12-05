@@ -240,6 +240,7 @@ def cli(opts, args):
                 format = 'json'
     else:
         data = {}
+        # FIXME: use a recoursing function for multiple files and included files
         for data_file in args[1:]:
             path = os.path.join(os.getcwd(), os.path.expanduser(data_file))
             if format == 'auto':
@@ -265,6 +266,19 @@ def cli(opts, args):
                     raise
                 try:
                     partial_data = fn(raw_data) or {}
+                    # FIXME: use a recoursing function for multiple files and included files
+                    if opts.include:
+                        if isinstance(partial_data.get(opts.include, []), list):
+                            for data_file in partial_data.get(opts.include, []):
+                                path = os.path.join(os.getcwd(), os.path.expanduser(data_file))
+                                try:
+                                    with open(path) as fp:
+                                        raw_data = fp.read()
+                                    partial_data.update(fn(raw_data))
+                                except except_exc:
+                                    raise_exc(u'%s ...' % raw_data[:60])
+                        else:
+                            raise InvalidDataFormat("Special include '%s' key must contain a list" % opts.include)
                 except except_exc:
                     raise raise_exc(u'%s ...' % raw_data[:60])
             else:
@@ -359,6 +373,10 @@ def main():
         '--strict',
         help='Disallow undefined variables to be used within the template',
         dest='strict', action='store_true')
+    parser.add_option(
+        '--include',
+        help='Use the special INCLUDE array key to include another data file',
+        dest='include', action='store', default='')
     opts, args = parser.parse_args()
 
     # Dedupe list
