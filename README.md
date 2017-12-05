@@ -26,6 +26,8 @@ Options:
                         Use only this section from the configuration
   --strict              Disallow undefined variables to be used within the
                         template
+  --include=INCLUDE     Use the special INCLUDE array key to include another
+                        data file
 ```
 
 ## Optional YAML support
@@ -103,6 +105,6 @@ var10: val 10
 ```
 
 ## TODO
- [] Refactor the file inclusions and multiple data file
- [] Variable inheritance and overrides
- [] Tests!
+ [ ] Refactor the file inclusions and multiple data file
+ [ ] Variable inheritance and overrides
+ [ ] Tests!
