@@ -239,38 +239,42 @@ def cli(opts, args):
             else:
                 format = 'json'
     else:
-        path = os.path.join(os.getcwd(), os.path.expanduser(args[1]))
-        if format == 'auto':
-            ext = os.path.splitext(path)[1][1:]
-            if ext in formats:
-                format = ext
-            else:
-                raise InvalidDataFormat(ext)
+        data = {}
+        for data_file in args[1:]:
+            path = os.path.join(os.getcwd(), os.path.expanduser(data_file))
+            if format == 'auto':
+                ext = os.path.splitext(path)[1][1:]
+                if ext in formats:
+                    file_format = ext
+                else:
+                    raise InvalidDataFormat(ext)
 
-        with open(path) as fp:
-            data = fp.read()
+            with open(path) as fp:
+                raw_data = fp.read()
+
+            if raw_data:
+                try:
+                    fn, except_exc, raise_exc = get_format(file_format)
+                except InvalidDataFormat:
+                    if file_format in ('yml', 'yaml'):
+                        raise InvalidDataFormat('%s: install pyyaml to fix' % file_format)
+                    if file_format == 'toml':
+                        raise InvalidDataFormat('toml: install toml to fix')
+                    if file_format == 'xml':
+                        raise InvalidDataFormat('xml: install xmltodict to fix')
+                    raise
+                try:
+                    partial_data = fn(raw_data) or {}
+                except except_exc:
+                    raise raise_exc(u'%s ...' % raw_data[:60])
+            else:
+                partial_data = {}
+
+            data.update(partial_data)
 
     template_path = os.path.abspath(args[0])
-
-    if data:
-        try:
-            fn, except_exc, raise_exc = get_format(format)
-        except InvalidDataFormat:
-            if format in ('yml', 'yaml'):
-                raise InvalidDataFormat('%s: install pyyaml to fix' % format)
-            if format == 'toml':
-                raise InvalidDataFormat('toml: install toml to fix')
-            if format == 'xml':
-                raise InvalidDataFormat('xml: install xmltodict to fix')
-            raise
-        try:
-            data = fn(data) or {}
-        except except_exc:
-            raise raise_exc(u'%s ...' % data[:60])
-    else:
-        data = {}
-
     extensions = []
+
     for ext in opts.extensions:
         # Allow shorthand and assume if it's not a module
         # path, it's probably trying to use builtin from jinja2
@@ -321,7 +325,7 @@ class LazyHelpOption(Option):
 def main():
     parser = OptionParser(
         option_class=LazyHelpOption,
-        usage="usage: %prog [options] <input template> <input data>",
+        usage="usage: %prog [options] <input template> <input data> [<input data>, <input data>, ...]",
         version="jinja2-cli v%s\n - Jinja2 v%s" % (
             __version__, jinja2.__version__),
     )

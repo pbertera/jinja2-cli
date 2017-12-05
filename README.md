@@ -12,7 +12,7 @@ $ curl -s http://httpbin.org/ip | jinja2 helloip.tmpl > helloip.html
 
 ## Usage
 ```
-Usage: jinja2 [options] <input template> <input data>
+Usage: jinja2 [options] <input template> <input data> [<input data>, <input data>, ...]
 
 Options:
   --version             show program's version number and exit
