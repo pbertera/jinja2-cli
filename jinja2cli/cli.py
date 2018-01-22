@@ -6,10 +6,8 @@ License: BSD, see LICENSE for more details.
 """
 
 import sys
-import os
 from jinja2cli import __version__
 
-sys.path.insert(0, os.getcwd())
 
 PY3 = sys.version_info[0] == 3
 
@@ -51,10 +49,6 @@ class MalformedXML(InvalidDataFormat):
     pass
 
 
-class MalformedEnv(InvalidDataFormat):
-    pass
-
-
 def get_format(fmt):
     try:
         return formats[fmt]()
@@ -88,10 +82,7 @@ def _load_ini():
         import configparser as ConfigParser
 
     def _parse_ini(data):
-        try:
-            from StringIO import StringIO
-        except ImportError:
-            from io import StringIO
+        import StringIO
 
         class MyConfigParser(ConfigParser.ConfigParser):
             def as_dict(self):
@@ -102,7 +93,7 @@ def _load_ini():
                 return d
 
         p = MyConfigParser()
-        p.readfp(StringIO(data))
+        p.readfp(StringIO.StringIO(data))
         return p.as_dict()
 
     return _parse_ini, ConfigParser.Error, MalformedINI
@@ -155,23 +146,6 @@ def _load_xml():
     return xmltodict.parse, xml.parsers.expat.ExpatError, MalformedXML
 
 
-def _load_env():
-    def _parse_env(data):
-        """
-        Parse an envfile format of key=value pairs that are newline separated
-        """
-        dict_ = {}
-        for line in data.splitlines():
-            line = line.lstrip()
-            # ignore empty or commented lines
-            if not line or line[:1] == '#':
-                continue
-            k, v = line.split('=', 1)
-            dict_[k] = v
-        return dict_
-    return _parse_env, Exception, MalformedEnv
-
-
 # Global list of available format parsers on your system
 # mapped to the callable/Exception to parse a string into a dict
 formats = {
@@ -182,7 +156,6 @@ formats = {
     'querystring': _load_querystring,
     'toml': _load_toml,
     'xml': _load_xml,
-    'env': _load_env,
 }
 
 
@@ -192,7 +165,6 @@ from optparse import OptionParser, Option
 
 import jinja2
 from jinja2 import Environment, FileSystemLoader
-
 
 def render(template_path, data, extensions, strict=False, markdown=False, md_extensions=[]):
     env = Environment(
@@ -208,7 +180,7 @@ def render(template_path, data, extensions, strict=False, markdown=False, md_ext
     env.globals['environ'] = os.environ.get
 
     if markdown:
-        # add the Markdown filter
+        # Markdown filter
         import markdown
         md = markdown.Markdown(extensions=md_extensions)
         env.filters['markdown'] = lambda text: jinja2.Markup(md.convert(text))
@@ -218,8 +190,6 @@ def render(template_path, data, extensions, strict=False, markdown=False, md_ext
 
 
 def is_fd_alive(fd):
-    if os.name == 'nt':
-        return not os.isatty(fd.fileno())
     import select
     return bool(select.select([fd], [], [], 0)[0])
 
@@ -239,56 +209,48 @@ def cli(opts, args):
             else:
                 format = 'json'
     else:
-        data = {}
-        # FIXME: use a recoursing function for multiple files and included files
+        data = ""
         for data_file in args[1:]:
             path = os.path.join(os.getcwd(), os.path.expanduser(data_file))
             if format == 'auto':
                 ext = os.path.splitext(path)[1][1:]
                 if ext in formats:
-                    file_format = ext
+                    format = ext
                 else:
                     raise InvalidDataFormat(ext)
-
             with open(path) as fp:
-                raw_data = fp.read()
-
-            if raw_data:
-                try:
-                    fn, except_exc, raise_exc = get_format(file_format)
-                except InvalidDataFormat:
-                    if file_format in ('yml', 'yaml'):
-                        raise InvalidDataFormat('%s: install pyyaml to fix' % file_format)
-                    if file_format == 'toml':
-                        raise InvalidDataFormat('toml: install toml to fix')
-                    if file_format == 'xml':
-                        raise InvalidDataFormat('xml: install xmltodict to fix')
-                    raise
-                try:
-                    partial_data = fn(raw_data) or {}
-                    # FIXME: use a recoursing function for multiple files and included files
-                    if opts.include:
-                        if isinstance(partial_data.get(opts.include, []), list):
-                            for data_file in partial_data.get(opts.include, []):
-                                path = os.path.join(os.getcwd(), os.path.expanduser(data_file))
-                                try:
-                                    with open(path) as fp:
-                                        raw_data = fp.read()
-                                    partial_data.update(fn(raw_data))
-                                except except_exc:
-                                    raise_exc(u'%s ...' % raw_data[:60])
-                        else:
-                            raise InvalidDataFormat("Special include '%s' key must contain a list" % opts.include)
-                except except_exc:
-                    raise raise_exc(u'%s ...' % raw_data[:60])
-            else:
-                partial_data = {}
-
-            data.update(partial_data)
-
+                data = data + fp.read()
     template_path = os.path.abspath(args[0])
-    extensions = []
 
+    if data:
+        try:
+            fn, except_exc, raise_exc = get_format(format)
+        except InvalidDataFormat:
+            if format in ('yml', 'yaml'):
+                raise InvalidDataFormat('%s: install pyyaml to fix' % format)
+            if format == 'toml':
+                raise InvalidDataFormat('toml: install toml to fix')
+            if format == 'xml':
+                raise InvalidDataFormat('xml: install xmltodict to fix')
+            raise
+        try:
+            data = fn(data) or {}
+            # if the metadata file has an "include" the definitions from this file are included
+            # WARNING: same keys will be overwritten
+            if isinstance(data.get("include", []), list):
+                for inc in data.get("include", []):
+                    try:
+                        data.update(fn(open(inc)))
+                    except ValueError:
+                        raise InvalidDataFormat('included file %s has an invalid format / structure' % inc)
+            else:
+                raise InvalidDataFormat("'include' key must contain a list")
+        except except_exc:
+            raise raise_exc(u'%s ...' % data[:60])
+    else:
+        data = {}
+
+    extensions = []
     for ext in opts.extensions:
         # Allow shorthand and assume if it's not a module
         # path, it's probably trying to use builtin from jinja2
@@ -373,10 +335,6 @@ def main():
         '--strict',
         help='Disallow undefined variables to be used within the template',
         dest='strict', action='store_true')
-    parser.add_option(
-        '--include',
-        help='Use the special INCLUDE array key to include another data file',
-        dest='include', action='store', default='')
     opts, args = parser.parse_args()
 
     # Dedupe list
